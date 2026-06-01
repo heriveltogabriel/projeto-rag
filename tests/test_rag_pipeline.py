@@ -18,6 +18,7 @@ class FakeEmbeddings:
                 [
                     1.0 if "espresso" in text_lower else 0.0,
                     1.0 if "limpeza" in text_lower else 0.0,
+                    1.0 if "irrelevante" in text_lower else 0.0,
                 ]
             )
         return np.asarray(vectors, dtype="float32")
@@ -60,6 +61,23 @@ class RagPipelineTests(unittest.TestCase):
         pipeline = RagPipeline(Settings(), embeddings=FakeEmbeddings(), generator=FakeGenerator())
         with self.assertRaisesRegex(RuntimeError, "Indice vazio"):
             pipeline.retrieve("espresso", top_k=1)
+
+    def test_retrieve_prioritizes_exact_terms_from_lexical_search(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manual = Path(tmp) / "manual.txt"
+            manual.write_text(
+                "CSNY foi citado em uma secao curta.\n\n"
+                "Este trecho irrelevante tem muitas outras palavras.",
+                encoding="utf-8",
+            )
+            settings = Settings(document_path=manual, chunk_size=45, chunk_overlap=0, top_k=1)
+            pipeline = RagPipeline(settings, embeddings=FakeEmbeddings(), generator=FakeGenerator())
+            pipeline.index_path(manual, recursive=False)
+
+            results = pipeline.retrieve("CSNY", top_k=1)
+
+        self.assertEqual(results[0].chunk.chunk_id, 1)
+        self.assertIn("CSNY", results[0].chunk.text)
 
 
 if __name__ == "__main__":

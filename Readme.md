@@ -12,14 +12,14 @@ relevantes e usa um modelo local no Ollama para gerar a resposta.
 ## Arquitetura
 
 ```text
-Documento -> Loader -> Chunker -> Embeddings -> FAISS -> Prompt -> Ollama -> Resposta
+Documento -> Loader -> Chunker -> Embeddings + Busca lexical -> Fusao de fontes -> Prompt -> Ollama -> Resposta
 ```
 
 - `projeto_rag/document_loader.py`: le PDF, TXT, MD e DOCX.
 - `projeto_rag/chunker.py`: divide textos em blocos com overlap.
 - `projeto_rag/embeddings.py`: cria vetores com SentenceTransformers.
-- `projeto_rag/vector_store.py`: indexa e busca vetores com FAISS.
-- `projeto_rag/rag_pipeline.py`: orquestra indexacao, busca e resposta.
+- `projeto_rag/vector_store.py`: indexa vetores com FAISS e tambem faz busca lexical.
+- `projeto_rag/rag_pipeline.py`: combina busca vetorial e lexical, monta contexto e gera resposta.
 - `app/main.py`: API FastAPI.
 - `projeto_rag/cli.py`: comandos de terminal.
 - `app_web.py`: interface Streamlit simples.
@@ -59,6 +59,9 @@ Variaveis principais:
 - `RAG_EMBEDDING_MODEL_PATH`: caminho local para um snapshot ja baixado.
 - `RAG_HF_HUB_OFFLINE`: use `1` para evitar chamadas ao Hugging Face.
 - `RAG_OLLAMA_MODEL`: modelo local de geracao no Ollama.
+
+A busca e hibrida: ela combina similaridade semantica por embeddings com busca por
+termos exatos. Isso melhora consultas com siglas, codigos, nomes proprios e numeros.
 
 ## Uso Via CLI
 

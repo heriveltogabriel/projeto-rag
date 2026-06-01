@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import re
 from typing import List, Optional
 
 import faiss
@@ -34,6 +35,10 @@ class VectorStore:
         np.divide(normalized, norms, out=normalized, where=norms > 0)
         return normalized
 
+    @staticmethod
+    def _tokens(text: str) -> List[str]:
+        return re.findall(r"[A-Za-zÀ-ÖØ-öø-ÿ0-9]+", text.lower())
+
     def build(self, chunks: List[TextChunk], embeddings: np.ndarray) -> None:
         if not chunks:
             raise ValueError("Nao ha chunks para indexar.")
@@ -67,3 +72,29 @@ class VectorStore:
                 continue
             results.append(SearchResult(chunk=self._chunks[int(idx)], score=float(score)))
         return results
+
+    def lexical_search(self, query: str, top_k: int) -> List[SearchResult]:
+        if not self._chunks:
+            raise RuntimeError("Indice vazio. Rode a indexacao antes de pesquisar.")
+        if top_k <= 0:
+            raise ValueError("top_k deve ser maior que zero.")
+
+        query_tokens = set(self._tokens(query))
+        if not query_tokens:
+            return []
+
+        query_text = query.strip().lower()
+        scored: List[SearchResult] = []
+        for chunk in self._chunks:
+            chunk_text = chunk.text.lower()
+            chunk_tokens = set(self._tokens(chunk.text))
+            overlap = query_tokens.intersection(chunk_tokens)
+            if not overlap and query_text not in chunk_text:
+                continue
+
+            token_score = len(overlap) / len(query_tokens)
+            phrase_bonus = 0.5 if query_text and query_text in chunk_text else 0.0
+            scored.append(SearchResult(chunk=chunk, score=token_score + phrase_bonus))
+
+        scored.sort(key=lambda result: result.score, reverse=True)
+        return scored[: min(top_k, len(scored))]

@@ -26,6 +26,21 @@ class VectorStoreTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "Indice vazio"):
             store.search(np.array([0.0, 0.1], dtype="float32"), top_k=1)
 
+    def test_lexical_search_finds_exact_acronym(self):
+        chunks = [
+            TextChunk(text="A banda CSNY aparece no documentario.", source="a.pdf", chunk_id=1),
+            TextChunk(text="Outro trecho sobre cafe espresso.", source="a.pdf", chunk_id=2),
+        ]
+        embeddings = np.array([[1.0, 0.0], [0.0, 1.0]], dtype="float32")
+        store = VectorStore()
+        store.build(chunks, embeddings)
+
+        results = store.lexical_search("CSNY", top_k=2)
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].chunk.chunk_id, 1)
+        self.assertGreaterEqual(results[0].score, 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()

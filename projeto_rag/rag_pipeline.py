@@ -21,8 +21,10 @@ class OllamaGenerator:
     def generate(self, question: str, context: str) -> str:
         system_prompt = (
             "Voce e um assistente tecnico especialista no manual fornecido. "
+            "Responda sempre em portugues do Brasil. "
             "Use apenas as informacoes do contexto para responder. "
-            "Se a resposta nao estiver no contexto, diga que nao encontrou no manual.\n\n"
+            "Se a resposta nao estiver no contexto, responda exatamente: "
+            "\"Nao encontrei essa informacao no PDF enviado.\"\n\n"
             f"Contexto:\n{context}"
         )
         response = ollama.chat(
@@ -69,8 +71,32 @@ class RagPipeline:
         query = question.strip()
         if not query:
             raise ValueError("Pergunta vazia.")
+        result_count = top_k or self.settings.top_k
         vectors = self.embeddings.embed([query])
-        return self.vector_store.search(vectors[0], top_k or self.settings.top_k)
+        vector_results = self.vector_store.search(vectors[0], result_count * 2)
+        lexical_results = self.vector_store.lexical_search(query, result_count)
+        return self._merge_results(vector_results, lexical_results, result_count)
+
+    @staticmethod
+    def _merge_results(
+        vector_results: List[SearchResult],
+        lexical_results: List[SearchResult],
+        top_k: int,
+    ) -> List[SearchResult]:
+        combined = {}
+
+        for result in vector_results:
+            key = (result.chunk.source, result.chunk.chunk_id)
+            combined[key] = SearchResult(chunk=result.chunk, score=result.score)
+
+        for result in lexical_results:
+            key = (result.chunk.source, result.chunk.chunk_id)
+            lexical_boosted = SearchResult(chunk=result.chunk, score=result.score + 1.0)
+            existing = combined.get(key)
+            if existing is None or lexical_boosted.score > existing.score:
+                combined[key] = lexical_boosted
+
+        return sorted(combined.values(), key=lambda result: result.score, reverse=True)[:top_k]
 
     @staticmethod
     def _build_context(results: List[SearchResult]) -> str:
