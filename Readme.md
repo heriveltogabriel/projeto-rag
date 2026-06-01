@@ -116,6 +116,15 @@ curl -s -X POST http://127.0.0.1:8010/perguntar \
 .venv/bin/streamlit run app_web.py
 ```
 
+A interface abre um chat local para PDFs enviados pelo usuario:
+
+1. Clique em **Enviar PDF** e escolha um arquivo `.pdf`.
+2. Clique em **Indexar PDF**.
+3. Quando a indexacao terminar, faca perguntas no chat.
+
+Os PDFs enviados pela interface sao salvos em `.rag_uploads/`, uma pasta local
+ignorada pelo Git.
+
 ## Testes
 
 Os testes usam `unittest` e nao exigem rede nem Ollama:

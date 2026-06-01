@@ -16,3 +16,4 @@ env/
 *.pkl
 *.sqlite
 *.log
+.rag_uploads/
