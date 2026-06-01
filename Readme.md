@@ -120,7 +120,8 @@ A interface abre um chat local para PDFs enviados pelo usuario:
 
 1. Clique em **Enviar PDF** e escolha um arquivo `.pdf`.
 2. Clique em **Indexar PDF**.
-3. Quando a indexacao terminar, faca perguntas no chat.
+3. Ajuste **Trechos recuperados** se quiser mandar mais contexto para a resposta.
+4. Quando a indexacao terminar, faca perguntas no chat.
 
 Os PDFs enviados pela interface sao salvos em `.rag_uploads/`, uma pasta local
 ignorada pelo Git.

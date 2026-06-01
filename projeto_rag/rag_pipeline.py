@@ -72,9 +72,27 @@ class RagPipeline:
         vectors = self.embeddings.embed([query])
         return self.vector_store.search(vectors[0], top_k or self.settings.top_k)
 
+    @staticmethod
+    def _build_context(results: List[SearchResult]) -> str:
+        context_parts = []
+        for index, result in enumerate(results, start=1):
+            context_parts.append(
+                "\n".join(
+                    [
+                        f"Fonte {index}",
+                        f"Arquivo: {result.chunk.source}",
+                        f"Chunk: {result.chunk.chunk_id}",
+                        f"Score: {result.score:.4f}",
+                        "Trecho:",
+                        result.chunk.text,
+                    ]
+                )
+            )
+        return "\n\n---\n\n".join(context_parts)
+
     def answer(self, question: str, top_k: Optional[int] = None, generate: bool = True) -> Dict[str, Any]:
         results = self.retrieve(question, top_k=top_k)
-        context = "\n---\n".join(result.chunk.text for result in results)
+        context = self._build_context(results)
         answer = self.generator.generate(question, context) if generate else "Geracao desativada."
         return {
             "question": question,

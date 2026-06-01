@@ -27,6 +27,13 @@ class VectorStore:
     def count(self) -> int:
         return len(self._chunks)
 
+    @staticmethod
+    def _normalize(vectors: np.ndarray) -> np.ndarray:
+        normalized = np.asarray(vectors, dtype="float32").copy()
+        norms = np.linalg.norm(normalized, axis=1, keepdims=True)
+        np.divide(normalized, norms, out=normalized, where=norms > 0)
+        return normalized
+
     def build(self, chunks: List[TextChunk], embeddings: np.ndarray) -> None:
         if not chunks:
             raise ValueError("Nao ha chunks para indexar.")
@@ -36,8 +43,9 @@ class VectorStore:
         if vectors.shape[0] != len(chunks):
             raise ValueError("Quantidade de embeddings difere da quantidade de chunks.")
 
-        index = faiss.IndexFlatL2(vectors.shape[1])
-        index.add(vectors)
+        normalized = self._normalize(vectors)
+        index = faiss.IndexFlatIP(normalized.shape[1])
+        index.add(normalized)
         self._index = index
         self._chunks = list(chunks)
 
@@ -50,11 +58,12 @@ class VectorStore:
         query = np.asarray(query_embedding, dtype="float32")
         if query.ndim == 1:
             query = query.reshape(1, -1)
-        distances, indices = self._index.search(query, min(top_k, len(self._chunks)))
+        query = self._normalize(query)
+        scores, indices = self._index.search(query, min(top_k, len(self._chunks)))
 
         results: List[SearchResult] = []
-        for distance, idx in zip(distances[0], indices[0]):
+        for score, idx in zip(scores[0], indices[0]):
             if idx < 0:
                 continue
-            results.append(SearchResult(chunk=self._chunks[int(idx)], score=float(distance)))
+            results.append(SearchResult(chunk=self._chunks[int(idx)], score=float(score)))
         return results

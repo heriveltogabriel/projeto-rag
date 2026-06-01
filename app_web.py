@@ -13,6 +13,7 @@ st.title("Assistente Tecnico do Manual")
 
 
 UPLOAD_DIR = Path(".rag_uploads")
+settings = get_settings()
 
 
 def _safe_filename(filename: str) -> str:
@@ -33,7 +34,7 @@ def _save_uploaded_pdf(uploaded_file) -> tuple[Path, str]:
 
 
 if "pipeline" not in st.session_state:
-    st.session_state.pipeline = RagPipeline(get_settings())
+    st.session_state.pipeline = RagPipeline(settings)
 if "indexed" not in st.session_state:
     st.session_state.indexed = False
 if "uploaded_pdf_path" not in st.session_state:
@@ -52,7 +53,7 @@ if uploaded_pdf is not None:
         st.session_state.uploaded_pdf_digest = uploaded_digest
         st.session_state.document_name = uploaded_pdf.name
         st.session_state.indexed = False
-        st.session_state.pipeline = RagPipeline(get_settings())
+        st.session_state.pipeline = RagPipeline(settings)
 
     st.caption(f"Arquivo carregado: {st.session_state.document_name}")
 
@@ -76,6 +77,14 @@ if uploaded_pdf is None:
 if st.session_state.indexed and st.session_state.document_name:
     st.success(f"Pronto para perguntas sobre: {st.session_state.document_name}")
 
+top_k = st.slider(
+    "Trechos recuperados",
+    min_value=3,
+    max_value=10,
+    value=settings.top_k,
+    help="Aumente quando a resposta parecer incompleta ou o PDF for grande.",
+)
+
 question = st.chat_input("Pergunte algo sobre o PDF")
 if question:
     if uploaded_pdf is None:
@@ -87,7 +96,7 @@ if question:
             st.markdown(question)
         with st.chat_message("assistant"):
             with st.spinner("Consultando o RAG local..."):
-                response = st.session_state.pipeline.answer(question)
+                response = st.session_state.pipeline.answer(question, top_k=top_k)
                 st.markdown(response["answer"])
                 with st.expander("Fontes"):
                     for source in response["sources"]:

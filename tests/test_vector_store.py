@@ -11,14 +11,15 @@ class VectorStoreTests(unittest.TestCase):
             TextChunk(text="temperatura ideal espresso", source="a.pdf", chunk_id=1),
             TextChunk(text="limpeza do reservatorio", source="a.pdf", chunk_id=2),
         ]
-        embeddings = np.array([[0.0, 0.0], [10.0, 10.0]], dtype="float32")
+        embeddings = np.array([[1.0, 0.0], [0.0, 1.0]], dtype="float32")
         store = VectorStore()
         store.build(chunks, embeddings)
 
-        results = store.search(np.array([0.0, 0.1], dtype="float32"), top_k=1)
+        results = store.search(np.array([0.9, 0.1], dtype="float32"), top_k=1)
 
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].chunk.text, "temperatura ideal espresso")
+        self.assertGreater(results[0].score, 0.9)
 
     def test_search_before_build_raises_error(self):
         store = VectorStore()

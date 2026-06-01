@@ -27,9 +27,9 @@ def _bool_from_env(name: str, default: bool = False) -> bool:
 class Settings:
     base_dir: Path = BASE_DIR
     document_path: Path = BASE_DIR / os.getenv("RAG_DOCUMENT_PATH", "ManualCafe.pdf")
-    chunk_size: int = _int_from_env("RAG_CHUNK_SIZE", 500)
-    chunk_overlap: int = _int_from_env("RAG_CHUNK_OVERLAP", 50)
-    top_k: int = _int_from_env("RAG_TOP_K", 3)
+    chunk_size: int = _int_from_env("RAG_CHUNK_SIZE", 900)
+    chunk_overlap: int = _int_from_env("RAG_CHUNK_OVERLAP", 180)
+    top_k: int = _int_from_env("RAG_TOP_K", 6)
     embedding_model: str = os.getenv(
         "RAG_EMBEDDING_MODEL",
         "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",

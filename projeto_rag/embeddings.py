@@ -33,6 +33,7 @@ class SentenceTransformerEmbeddings:
             texts,
             batch_size=8,
             show_progress_bar=False,
+            normalize_embeddings=True,
             convert_to_numpy=True,
         )
         return np.asarray(vectors, dtype="float32")
