@@ -134,6 +134,27 @@ class RagPipelineTests(unittest.TestCase):
         self.assertEqual(results[0].chunk.chunk_id, 1)
         self.assertIn("CSNY", results[0].chunk.text)
 
+    def test_retrieve_expands_marital_pronoun_question_with_document_subject(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manual = Path(tmp) / "Neil_Young.txt"
+            manual.write_text(
+                "Neil Young gravou muitas musicas.\n\n"
+                "Amo a vida com minha esposa Pegi e as criancas.",
+                encoding="utf-8",
+            )
+            settings = Settings(document_path=manual, chunk_size=80, chunk_overlap=0, top_k=1)
+            pipeline = RagPipeline(
+                settings,
+                embeddings=FakeEmbeddings(),
+                generator=FakeGenerator(),
+                reranker=FakeReranker(),
+            )
+            pipeline.index_path(manual, recursive=False)
+
+            results = pipeline.retrieve("Ele e casado?", top_k=1)
+
+        self.assertIn("Pegi", results[0].chunk.text)
+
     def test_retrieve_uses_more_candidates_before_reranking(self):
         class LastCandidateReranker:
             def rerank(self, question, results, top_k):

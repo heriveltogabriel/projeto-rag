@@ -74,7 +74,9 @@ A busca e hibrida e em duas etapas:
    que o titulo do documento esconda o trecho da resposta.
 4. Perguntas factuais sobre relacoes, como "nome da esposa", ganham prioridade quando o
    trecho contem a relacao perto de um nome proprio.
-5. Se `RAG_RERANKER_ENABLED=1` e o modelo estiver disponivel, um CrossEncoder reordena
+5. Perguntas curtas com pronome ou estado civil, como "Ele e casado?", sao expandidas
+   com o assunto provavel do documento e termos relacionados.
+6. Se `RAG_RERANKER_ENABLED=1` e o modelo estiver disponivel, um CrossEncoder reordena
    os candidatos antes de montar o contexto final.
 
 Isso melhora consultas com siglas, codigos, nomes proprios, numeros e perguntas factuais

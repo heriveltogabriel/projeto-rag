@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol
 
 import ollama
@@ -39,6 +40,51 @@ class OllamaGenerator:
 
 
 class RagPipeline:
+    _ANAPHORA_TERMS = {
+        "ele",
+        "ela",
+        "dele",
+        "dela",
+        "autor",
+        "autora",
+        "biografado",
+        "biografada",
+        "personagem",
+    }
+    _MARITAL_TERMS = {
+        "casado",
+        "casada",
+        "casamento",
+        "casou",
+        "casar",
+        "solteiro",
+        "solteira",
+        "married",
+        "wife",
+        "husband",
+        "spouse",
+    }
+    _MARITAL_EXPANSION = (
+        "esposa marido companheira companheiro conjuge cônjuge casamento "
+        "casado casada wife husband spouse married"
+    )
+    _DOCUMENT_TERM_STOPWORDS = {
+        "a",
+        "as",
+        "biografia",
+        "autobiografia",
+        "de",
+        "doc",
+        "documento",
+        "do",
+        "dos",
+        "ebook",
+        "livro",
+        "manual",
+        "pdf",
+        "the",
+    }
+
     def __init__(
         self,
         settings: Optional[Settings] = None,
@@ -56,6 +102,7 @@ class RagPipeline:
         else:
             self.reranker = NoOpReranker()
         self.vector_store = VectorStore()
+        self.document_query_terms: List[str] = []
 
     def index_path(self, path=None, recursive: bool = True) -> Dict[str, Any]:
         target = path or self.settings.document_path
@@ -73,6 +120,7 @@ class RagPipeline:
 
         vectors = self.embeddings.embed([chunk.text for chunk in chunks])
         self.vector_store.build(chunks, vectors)
+        self.document_query_terms = self._extract_document_query_terms([document.path for document in documents])
         return {"documents": len(documents), "chunks": len(chunks), "path": str(target)}
 
     def retrieve(self, question: str, top_k: Optional[int] = None) -> List[SearchResult]:
@@ -81,11 +129,53 @@ class RagPipeline:
             raise ValueError("Pergunta vazia.")
         result_count = top_k or self.settings.top_k
         candidate_count = max(result_count, self.settings.retrieve_candidates)
-        vectors = self.embeddings.embed([query])
+        expanded_query = self._expand_query(query)
+        vectors = self.embeddings.embed([expanded_query])
         vector_results = self.vector_store.search(vectors[0], candidate_count)
-        lexical_results = self.vector_store.lexical_search(query, candidate_count)
+        lexical_results = self.vector_store.lexical_search(expanded_query, candidate_count)
         candidates = self._merge_results(vector_results, lexical_results, candidate_count)
-        return self.reranker.rerank(query, candidates, result_count)
+        return self.reranker.rerank(expanded_query, candidates, result_count)
+
+    def _expand_query(self, query: str) -> str:
+        query_terms = set(VectorStore._tokens(query))
+        expansions = []
+
+        if self.document_query_terms and self._should_add_document_terms(query_terms):
+            expansions.append(" ".join(self.document_query_terms))
+
+        if query_terms.intersection(self._MARITAL_TERMS):
+            expansions.append(self._MARITAL_EXPANSION)
+
+        if not expansions:
+            return query
+
+        return " ".join([query, *expansions])
+
+    def _should_add_document_terms(self, query_terms: set) -> bool:
+        if query_terms.intersection(self._ANAPHORA_TERMS):
+            return True
+        if query_terms.intersection(self._MARITAL_TERMS):
+            return True
+        return False
+
+    @classmethod
+    def _extract_document_query_terms(cls, paths: List[Path]) -> List[str]:
+        if len(paths) != 1:
+            return []
+
+        stem = paths[0].stem
+        stem = stem.replace("_", " ").replace("-", " ")
+        terms = []
+        for token in VectorStore._tokens(stem):
+            if token in cls._DOCUMENT_TERM_STOPWORDS:
+                continue
+            if token.isdigit() or len(token) < 2:
+                continue
+            if len(token) >= 8 and all(char in "0123456789abcdef" for char in token):
+                continue
+            if token not in terms:
+                terms.append(token)
+        return terms[:6]
 
     @staticmethod
     def _merge_results(
