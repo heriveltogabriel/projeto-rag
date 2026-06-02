@@ -30,11 +30,19 @@ class Settings:
     chunk_size: int = _int_from_env("RAG_CHUNK_SIZE", 900)
     chunk_overlap: int = _int_from_env("RAG_CHUNK_OVERLAP", 180)
     top_k: int = _int_from_env("RAG_TOP_K", 6)
+    retrieve_candidates: int = _int_from_env("RAG_RETRIEVE_CANDIDATES", 40)
     embedding_model: str = os.getenv(
         "RAG_EMBEDDING_MODEL",
-        "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        "BAAI/bge-m3",
     )
     embedding_model_path: str = os.getenv("RAG_EMBEDDING_MODEL_PATH", "")
+    embedding_fallback_model: str = os.getenv(
+        "RAG_EMBEDDING_FALLBACK_MODEL",
+        "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+    )
+    reranker_enabled: bool = _bool_from_env("RAG_RERANKER_ENABLED", True)
+    reranker_model: str = os.getenv("RAG_RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")
+    reranker_model_path: str = os.getenv("RAG_RERANKER_MODEL_PATH", "")
     hf_hub_offline: bool = _bool_from_env("RAG_HF_HUB_OFFLINE", False)
     ollama_model: str = os.getenv("RAG_OLLAMA_MODEL", "llama3:latest")
 

@@ -6,6 +6,7 @@ from projeto_rag.chunker import chunk_text
 from projeto_rag.config import Settings, get_settings
 from projeto_rag.document_loader import load_documents
 from projeto_rag.embeddings import EmbeddingProvider, SentenceTransformerEmbeddings
+from projeto_rag.reranker import CrossEncoderReranker, NoOpReranker, Reranker
 from projeto_rag.vector_store import SearchResult, TextChunk, VectorStore
 
 
@@ -43,10 +44,17 @@ class RagPipeline:
         settings: Optional[Settings] = None,
         embeddings: Optional[EmbeddingProvider] = None,
         generator: Optional[TextGenerator] = None,
+        reranker: Optional[Reranker] = None,
     ):
         self.settings = settings or get_settings()
         self.embeddings = embeddings or SentenceTransformerEmbeddings(self.settings)
         self.generator = generator or OllamaGenerator(self.settings.ollama_model)
+        if reranker is not None:
+            self.reranker = reranker
+        elif self.settings.reranker_enabled:
+            self.reranker = CrossEncoderReranker(self.settings)
+        else:
+            self.reranker = NoOpReranker()
         self.vector_store = VectorStore()
 
     def index_path(self, path=None, recursive: bool = True) -> Dict[str, Any]:
@@ -72,10 +80,12 @@ class RagPipeline:
         if not query:
             raise ValueError("Pergunta vazia.")
         result_count = top_k or self.settings.top_k
+        candidate_count = max(result_count, self.settings.retrieve_candidates)
         vectors = self.embeddings.embed([query])
-        vector_results = self.vector_store.search(vectors[0], result_count * 2)
-        lexical_results = self.vector_store.lexical_search(query, result_count)
-        return self._merge_results(vector_results, lexical_results, result_count)
+        vector_results = self.vector_store.search(vectors[0], candidate_count)
+        lexical_results = self.vector_store.lexical_search(query, candidate_count)
+        candidates = self._merge_results(vector_results, lexical_results, candidate_count)
+        return self.reranker.rerank(query, candidates, result_count)
 
     @staticmethod
     def _merge_results(
@@ -119,10 +129,22 @@ class RagPipeline:
     def answer(self, question: str, top_k: Optional[int] = None, generate: bool = True) -> Dict[str, Any]:
         results = self.retrieve(question, top_k=top_k)
         context = self._build_context(results)
-        answer = self.generator.generate(question, context) if generate else "Geracao desativada."
+        generation_error = None
+        if generate:
+            try:
+                answer = self.generator.generate(question, context)
+            except Exception as exc:
+                generation_error = str(exc)
+                answer = (
+                    "Encontrei fontes relevantes, mas nao consegui gerar a resposta "
+                    "porque o Ollama nao esta acessivel. Verifique se o Ollama esta rodando."
+                )
+        else:
+            answer = "Geracao desativada."
         return {
             "question": question,
             "answer": answer,
+            "error": generation_error,
             "sources": [
                 {
                     "source": result.chunk.source,

@@ -12,14 +12,15 @@ relevantes e usa um modelo local no Ollama para gerar a resposta.
 ## Arquitetura
 
 ```text
-Documento -> Loader -> Chunker -> Embeddings + Busca lexical -> Fusao de fontes -> Prompt -> Ollama -> Resposta
+Documento -> Loader -> Chunker -> Embeddings + BM25 -> Fusao -> Reranker opcional -> Prompt -> Ollama -> Resposta
 ```
 
 - `projeto_rag/document_loader.py`: le PDF, TXT, MD e DOCX.
 - `projeto_rag/chunker.py`: divide textos em blocos com overlap.
-- `projeto_rag/embeddings.py`: cria vetores com SentenceTransformers.
-- `projeto_rag/vector_store.py`: indexa vetores com FAISS e tambem faz busca lexical.
-- `projeto_rag/rag_pipeline.py`: combina busca vetorial e lexical, monta contexto e gera resposta.
+- `projeto_rag/embeddings.py`: cria vetores com SentenceTransformers e fallback local.
+- `projeto_rag/vector_store.py`: indexa vetores com FAISS e faz busca lexical BM25.
+- `projeto_rag/reranker.py`: reordena candidatos com CrossEncoder quando habilitado.
+- `projeto_rag/rag_pipeline.py`: combina busca vetorial, BM25, reranking, contexto e resposta.
 - `app/main.py`: API FastAPI.
 - `projeto_rag/cli.py`: comandos de terminal.
 - `app_web.py`: interface Streamlit simples.
@@ -55,13 +56,34 @@ Variaveis principais:
 - `RAG_CHUNK_SIZE`: tamanho dos chunks.
 - `RAG_CHUNK_OVERLAP`: overlap entre chunks.
 - `RAG_TOP_K`: quantidade de fontes recuperadas.
+- `RAG_RETRIEVE_CANDIDATES`: quantidade interna de candidatos antes do reranking.
 - `RAG_EMBEDDING_MODEL`: modelo SentenceTransformers.
 - `RAG_EMBEDDING_MODEL_PATH`: caminho local para um snapshot ja baixado.
+- `RAG_EMBEDDING_FALLBACK_MODEL`: modelo usado se o principal nao estiver disponivel.
+- `RAG_RERANKER_ENABLED`: use `1` para habilitar reranking com CrossEncoder.
+- `RAG_RERANKER_MODEL`: modelo CrossEncoder usado no reranking.
+- `RAG_RERANKER_MODEL_PATH`: caminho local para um snapshot de reranker ja baixado.
 - `RAG_HF_HUB_OFFLINE`: use `1` para evitar chamadas ao Hugging Face.
 - `RAG_OLLAMA_MODEL`: modelo local de geracao no Ollama.
 
-A busca e hibrida: ela combina similaridade semantica por embeddings com busca por
-termos exatos. Isso melhora consultas com siglas, codigos, nomes proprios e numeros.
+A busca e hibrida e em duas etapas:
+
+1. O sistema recupera mais candidatos do que envia ao modelo (`RAG_RETRIEVE_CANDIDATES`).
+2. A fusao combina embeddings FAISS com BM25 lexical.
+3. Em PDFs unicos, termos que aparecem no nome do arquivo recebem peso menor para evitar
+   que o titulo do documento esconda o trecho da resposta.
+4. Perguntas factuais sobre relacoes, como "nome da esposa", ganham prioridade quando o
+   trecho contem a relacao perto de um nome proprio.
+5. Se `RAG_RERANKER_ENABLED=1` e o modelo estiver disponivel, um CrossEncoder reordena
+   os candidatos antes de montar o contexto final.
+
+Isso melhora consultas com siglas, codigos, nomes proprios, numeros e perguntas factuais
+em PDFs longos ou com muito ruido de indice/creditos.
+
+Os defaults de `.env.example` apontam para `BAAI/bge-m3` e
+`BAAI/bge-reranker-v2-m3`, que tendem a recuperar melhor texto em portugues. O primeiro
+uso pode baixar arquivos grandes do Hugging Face. Se a rede estiver indisponivel, o
+pipeline tenta usar `RAG_EMBEDDING_FALLBACK_MODEL` e continua sem reranker.
 
 ## Uso Via CLI
 
@@ -141,7 +163,22 @@ Os testes usam `unittest` e nao exigem rede nem Ollama:
 
 ### Hugging Face sem rede
 
-Se o modelo ja estiver em cache local, configure:
+Para baixar e deixar os modelos recomendados em cache:
+
+```bash
+env HF_HUB_ETAG_TIMEOUT=60 HF_HUB_DOWNLOAD_TIMEOUT=120 \
+  .venv/bin/python -c "from sentence_transformers import SentenceTransformer, CrossEncoder; SentenceTransformer('BAAI/bge-m3'); CrossEncoder('BAAI/bge-reranker-v2-m3')"
+```
+
+Se a rede estiver indisponivel, use modo offline. O pipeline pula modelos que nao
+estiverem em cache e tenta o fallback:
+
+```bash
+export RAG_HF_HUB_OFFLINE=1
+export RAG_RERANKER_ENABLED=0
+```
+
+Se o modelo ja estiver em cache local, voce tambem pode configurar o caminho exato:
 
 ```bash
 export RAG_HF_HUB_OFFLINE=1

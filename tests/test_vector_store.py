@@ -41,6 +41,21 @@ class VectorStoreTests(unittest.TestCase):
         self.assertEqual(results[0].chunk.chunk_id, 1)
         self.assertGreaterEqual(results[0].score, 1.0)
 
+    def test_lexical_search_prioritizes_factual_phrase_context(self):
+        chunks = [
+            TextChunk(text="Neil Young gravou varias musicas ao longo da carreira.", source="a.pdf", chunk_id=1),
+            TextChunk(text="Minha esposa Pegi cuidava da familia Young com Neil.", source="a.pdf", chunk_id=2),
+            TextChunk(text="Um capitulo sobre turnes e guitarras.", source="a.pdf", chunk_id=3),
+        ]
+        embeddings = np.array([[1.0, 0.0], [0.8, 0.2], [0.0, 1.0]], dtype="float32")
+        store = VectorStore()
+        store.build(chunks, embeddings)
+
+        results = store.lexical_search("qual o nome da esposa de Neil Young?", top_k=2)
+
+        self.assertEqual(results[0].chunk.chunk_id, 2)
+        self.assertIn("Pegi", results[0].chunk.text)
+
 
 if __name__ == "__main__":
     unittest.main()
